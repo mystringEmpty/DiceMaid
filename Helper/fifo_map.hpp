@@ -213,6 +213,12 @@ public:
         }
         return end();
     }
+    void swap(fifo_map& other) noexcept {
+        std::swap(inc_end, other.inc_end);
+        values.swap(other.values);
+        index.swap(other.index);
+        orders.swap(other.orders);
+    }
     void clear() noexcept {
         if (_Base::inc_end) {
             _Base::inc_end = 0;
