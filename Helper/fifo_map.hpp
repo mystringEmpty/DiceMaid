@@ -182,14 +182,14 @@ public:
         _Base::index.emplace(p.first, _Base::inc_end);
         return { iterator(this, ++_Base::inc_end), true };
     }
-    iterator emplace(const _Kty& key, const _Ty& val) {
+    std::pair<iterator, bool> emplace(const _Kty& key, const _Ty& val) {
         if (_Base::index.count(key)) {
-            return end();
+            return { end(),false };
         }
         _Base::values.emplace( key, val );
         _Base::orders.emplace(_Base::inc_end, key);
         _Base::index[key] = _Base::inc_end;
-        return iterator(this, ++_Base::inc_end);
+        return { iterator(this, ++_Base::inc_end) , true};
     }
     iterator erase(const _Kty& key) {
         //exlock guard{ ex_key };
