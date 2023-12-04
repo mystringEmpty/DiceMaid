@@ -1,0 +1,10 @@
+{
+  "name": "dicemaid",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "msgpack",
+    "yaml-cpp",
+    "libuv",
+    "libwebsockets"
+  ]
+}
