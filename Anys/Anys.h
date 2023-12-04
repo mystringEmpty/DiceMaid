@@ -4,12 +4,14 @@
 #include <shared_mutex>
 #include "json.hpp"
 #include "fifo_map.hpp"
+#include "toml.hpp"
 using std::string;
 using json = nlohmann::basic_json<fifo_map>;
 using lock_writer = std::unique_lock<std::shared_mutex>;
 
 enum class AnyType :size_t { Void, Empty, Boolean, Number, String, Table, Function, UserData, Anys };
 enum class LogLevel { Debug, Info, Notice, Warning, Error, Critical, Fatal };
+using any_int = int64_t;
 
 class Any;
 class AnyEmpty;
@@ -27,6 +29,7 @@ public:
     AnyIndex() = default;
     AnyIndex(const string&);
     AnyIndex(const char* c) { new(this) AnyIndex(string(c)); }
+    AnyIndex(const std::string_view& c) { new(this) AnyIndex(string(c)); }
     template<typename Num, std::enable_if_t<std::is_integral_v<Num>
     && !std::is_same_v<Num, char> && !std::is_same_v<Num, wchar_t>
         && !std::is_same_v<Num, bool>, int> = 0>
@@ -44,6 +47,7 @@ public:
     AnyIndex(const Any&);
     bool operator==(const AnyIndex& other)const { return idx == other.idx; }
     explicit operator bool()const { return idx; }
+    string str()const;
 };
 template<>
 struct std::hash<AnyIndex> {
@@ -68,6 +72,7 @@ public:
     operator Any()const;
     AnyEmpty* operator->();
     bool operator==(const AnyIndex& id)const;
+    AnyRef operator[](const char* key)const;
 };
 
 class AnyEmpty {
@@ -90,7 +95,7 @@ public:
     virtual string tname()const { static const string t{ "Empty" }; return t; }
     virtual void* ptr()const { return nullptr; }
     //virtual const char* c_str()const { return ""; }
-    virtual long long to_int()const { return 0; }
+    virtual any_int to_int()const { return 0; }
     virtual double to_num()const { return 0; }
     virtual operator double()const { return to_num(); }
     virtual std::string str()const { return {}; }
@@ -111,7 +116,7 @@ public:
 
     //virtual void push(lua_State*);
 
-    virtual json to_json() { return json(); }
+    virtual json to_json() const { return json(); }
 };
 
 class AnyBool :public AnyEmpty {
@@ -122,9 +127,22 @@ public:
     std::string tname()const override { static const std::string t{ "Boolean" }; return t; }
     operator bool() const override { return data; }
     std::string str()const override { return std::to_string(data); }
-    json to_json()override { return data; }
+    json to_json()const override { return data; }
 };
 
+class AnyInt :public AnyEmpty {
+    const any_int data;
+public:
+    AnyInt(double val) :AnyEmpty(AnyType::Number), data(val) {}
+    bool operator==(const Any& other)const override;
+    //bool operator==(const string& other)const override;
+    string tname()const override { static const string t{ "Number" }; return t; }
+    operator double()const override { return data; }
+    any_int to_int()const override { return data; }
+    std::string str()const override { return std::to_string(data); }
+    //void push(lua_State*)override;
+    json to_json()const override { return data; }
+};
 class AnyNumber :public AnyEmpty {
     const double data;
 public:
@@ -136,7 +154,7 @@ public:
     long long to_int()const override { return (long long)data; }
     std::string str()const override { return std::to_string(data); }
     //void push(lua_State*)override;
-    json to_json()override { return data; }
+    json to_json()const override { return data; }
 };
 
 class AnyString :public AnyEmpty {
@@ -154,7 +172,7 @@ public:
     operator const string& ()const { return data; }
     long long to_int()const override { return stoll(data); };
     //void push(lua_State*)override;
-    json to_json()override { return data; }
+    json to_json()const override { return data; }
 };
 
 //int lua_obj_tonumber(lua_State* L);
@@ -188,10 +206,12 @@ public:
         val.value = nullptr;
     }*/
     Any(bool b) :value(new AnyBool(b)) {}
-    Any(double d) :value(new AnyNumber(d)) {}
+    //Any(double d) :value(new AnyNumber(d)) {}
     template<typename Num, std::enable_if_t<std::is_integral_v<Num>
     && !std::is_same_v<Num, char> && !std::is_same_v<Num, wchar_t>
         && !std::is_same_v<Num, bool>, int> = 0>
+    Any(Num d) : value(new AnyInt((any_int)d)) {}
+    template<typename Num, std::enable_if_t<std::is_floating_point_v<Num>, int> = 0>
     Any(Num d) : value(new AnyNumber((double)d)) {}
     Any(const char* s) :value(s ? new AnyString(s) : nullptr) {}
     Any(const string& s) :value(new AnyString(s)) {}
@@ -199,6 +219,7 @@ public:
     template<class U, const string& (U::* F)() = &U::tname>
     Any(U* u) : value(u ? new lua_userdata(u) : nullptr) {}
     Any(const json& j);
+    Any(const toml::node& j);
     using Dict = fifo_map<string, Any>;
     using List = std::vector<Any>;
     //Any(Dict&& tab, const string& t = {});
@@ -224,7 +245,7 @@ public:
     bool is_string()const { return type() == AnyType::String; }
     bool is_table()const { return type() == AnyType::Table; }
     bool is_udata()const { return type() == AnyType::UserData; }
-    bool is_object()const { return type() == AnyType::Table || type() == AnyType::UserData; }
+    bool is_object()const { return type() == AnyType::Table || type() == AnyType::Anys || type() == AnyType::UserData; }
     bool is_function()const { return type() == AnyType::Function; }
 
     //Any& set_type(const string& s) { if (value)value->set_type(s); return *this; }
@@ -258,6 +279,9 @@ public:
     long long to_int()const{ return value ? value->to_int() : 0; }
     //Any to_table()const;
     //lua_table* as_table()const;
+    AnyObject* as_object()const {
+        return is_object() ? (AnyObject*)value : nullptr;
+    }
     template<class DerivedAnys = Anys>
     DerivedAnys* as_anys()const {
         return type() == AnyType::Anys ? dynamic_cast<DerivedAnys*>(value) : nullptr;
@@ -318,6 +342,7 @@ public:
 
 using any_dict = Any::Dict;
 using any_list = Any::List;
+using any_table = fifo_map<AnyIndex, Any>;
 //json to_json(const any_dict&);
 class AnyObject :public AnyEmpty {
 public:
@@ -336,7 +361,7 @@ public:
 class Anys :public AnyObject {
 protected:
     friend class Any;
-    fifo_map<AnyIndex, Any> fields;
+    any_table fields;
 public:
     Anys():AnyObject(AnyType::Anys){}
     Anys(const any_dict& d):AnyObject(AnyType::Anys) {
@@ -359,8 +384,8 @@ public:
         if (!val.is_void())fields[key] = val;
         else fields.erase(key);
     }
-    //virtual void push(lua_State*)override;
-    //void push_meta(lua_State*);
+    json to_json()const override;
+    toml::table to_toml()const;
 };
 //int lua_tab_pairs(lua_State* L);
 //int lua_tab_ipairs(lua_State* L);

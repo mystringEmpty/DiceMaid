@@ -6,7 +6,6 @@
 //#include "HelperChar.hpp"
 #include "HelperClock.hpp"
 #include "WSServer.hpp"
-#include "toml.hpp"
 
 template<typename T>
 using ptr = std::shared_ptr<T>;
@@ -24,10 +23,6 @@ const char* _DriverVer() {
 	static string ver = string(app_title) + " by " + app_author + " ver" + app_ver + "(" + std::to_string(app_build) + ")[" + _built_time() + "] for OneBot";
 	return ver.c_str();
 }
-const fs::path& AnysDriver::getRootDir()const {
-	static fs::path ret = std::filesystem::absolute(std::filesystem::current_path());
-	return ret;
-}
 //const string Empty;
 
 string ws_url;
@@ -38,6 +33,12 @@ bool link_server() {
 
 bool driver_init() {
 	app.init();
+	if (auto cfg{ app.configs["init"] };cfg.incl("onebot")) {
+		ws_url = cfg["onebot"]["ws_address"]->str();
+		cout << "ws_address:" << ws_url << endl;
+		if(!ws_url.empty())return true;
+	}
+	/*
 	if (fs::path tomlInit{ app.getRootDir() / "Diceki" / "init.toml" }; fs::exists(tomlInit)) {
 		cout << tomlInit << endl;
 		auto t = toml::parse_file(tomlInit.u8string());
@@ -46,7 +47,7 @@ bool driver_init() {
 			cout << "ws_address:" << ws_url << endl;
 			return true;
 		}
-	}
+	}*/
 	api->fatal("服务端配置读取失败！请确认Diceki/init.toml有写入ws_address！");
 	return false;
 }

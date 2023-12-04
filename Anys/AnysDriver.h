@@ -3,6 +3,7 @@
 class AnysDriver :public AnyProfile {
 	std::atomic<bool> Alived = false;
 public:
+	std::unordered_map<AnyIndex, AnyProfile> configs;
 	void init();
 	bool alive()const { return Alived; }
 	void log(const string&, LogLevel);

@@ -8,7 +8,6 @@
 //std::unordered_set<long long>eventsFriendAdd;
 
 void OneBotApi::listenEvent(Anys& raw) {
-	api->debug("监听事件："+ raw["event"]->str());
 	if (raw["event"] == "message") {
 		if (raw["subtype"] == "private_msg") {
 			api->debug("处理私聊消息");
@@ -19,6 +18,7 @@ void OneBotApi::listenEvent(Anys& raw) {
 		}
 		return;
 	}
+	else api->debug("未监听事件：" + raw["event"]->str());
 }
 
 void OneBot_Event(json& j, ClientState* cli) {

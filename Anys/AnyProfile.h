@@ -5,8 +5,8 @@ namespace fs = std::filesystem;
 
 class AnyProfile :public Anys {
 protected:
-	enum class FileType { Json, Toml, Yaml };
-	FileType fileType;
+	enum class FileType { Unknown, Json, Toml, Yaml };
+	FileType fileType = FileType::Unknown;
 	std::filesystem::path pathFile;
 public:
 	AnyProfile(const std::filesystem::path& = {});

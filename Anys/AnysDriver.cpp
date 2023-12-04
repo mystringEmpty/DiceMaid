@@ -4,6 +4,12 @@
 AnysDriver app;
 void AnysDriver::init() {
 	Alived = true;
+	fs::create_directories(getRootDir() / "Diceki" / "log");
+	configs.emplace("init", app.getRootDir() / "Diceki" / "init.toml");
+}
+const fs::path& AnysDriver::getRootDir()const {
+	static fs::path ret = std::filesystem::absolute(std::filesystem::current_path());
+	return ret;
 }
 void AnysDriver::log(const string& info, LogLevel lv) {
 	static fs::path logPath(getRootDir() / "Diceki" / "log" / ("log_" + to_string(time(nullptr)) + ".txt"));
