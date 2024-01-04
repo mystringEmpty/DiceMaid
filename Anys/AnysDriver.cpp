@@ -5,7 +5,6 @@ AnysDriver app;
 void AnysDriver::init() {
 	Alived = true;
 	fs::create_directories(getRootDir() / "Diceki" / "log");
-	configs.emplace("init", app.getRootDir() / "Diceki" / "init.toml");
 }
 const fs::path& AnysDriver::getRootDir()const {
 	static fs::path ret = std::filesystem::absolute(std::filesystem::current_path());

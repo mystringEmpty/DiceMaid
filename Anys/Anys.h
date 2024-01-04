@@ -5,9 +5,12 @@
 #include "json.hpp"
 #include "fifo_map.hpp"
 #include "toml.hpp"
+#include "HelperSTL.hpp"
 using std::string;
 using json = nlohmann::basic_json<fifo_map>;
 using lock_writer = std::unique_lock<std::shared_mutex>;
+template<typename T = Any>
+using fifo_dict_ci = std::unordered_map<string, T, hash_ci, equal_ci>;
 
 enum class AnyType :size_t { Void, Empty, Boolean, Number, String, Table, Function, UserData, Anys };
 enum class LogLevel { Debug, Info, Notice, Warning, Error, Critical, Fatal };
@@ -47,6 +50,7 @@ public:
     AnyIndex(const Any&);
     bool operator==(const AnyIndex& other)const { return idx == other.idx; }
     explicit operator bool()const { return idx; }
+    bool is_string()const { return idx && std::holds_alternative<string>(atoms[idx]); }
     string str()const;
 };
 template<>
@@ -205,7 +209,7 @@ public:
     /*Any(Any&& val) :value(val.value) {
         val.value = nullptr;
     }*/
-    Any(bool b) :value(new AnyBool(b)) {}
+    explicit Any(bool b) :value(new AnyBool(b)) {}
     //Any(double d) :value(new AnyNumber(d)) {}
     template<typename Num, std::enable_if_t<std::is_integral_v<Num>
     && !std::is_same_v<Num, char> && !std::is_same_v<Num, wchar_t>
@@ -282,6 +286,10 @@ public:
     AnyObject* as_object()const {
         return is_object() ? (AnyObject*)value : nullptr;
     }
+    template<class DerivedObject = Anys>
+    DerivedObject* as_table()const {
+        return type() == AnyType::Table ? dynamic_cast<DerivedObject*>(value) : nullptr;
+    }
     template<class DerivedAnys = Anys>
     DerivedAnys* as_anys()const {
         return type() == AnyType::Anys ? dynamic_cast<DerivedAnys*>(value) : nullptr;
@@ -341,6 +349,7 @@ public:
 //any lua_to_any(Any);
 
 using any_dict = Any::Dict;
+using any_dict_ci = fifo_dict_ci<>;
 using any_list = Any::List;
 using any_table = fifo_map<AnyIndex, Any>;
 //json to_json(const any_dict&);
@@ -355,8 +364,37 @@ public:
     }
     AnyRef operator[](size_t key) override { return AnyRef{ this,key }; }
     //AnyRef operator[](const Any& key)const override { return AnyRef{ this,key }; }
-    bool incl(const AnyIndex& key) const override = 0;
+    //bool incl(const AnyIndex& key) const override { return false; }
     virtual Any get(const AnyIndex& key, const Any& val = {});
+};
+class AnyCITable :public AnyObject {
+protected:
+    friend class Any;
+    any_dict_ci table;
+public:
+    AnyCITable() :AnyObject(AnyType::Table) {}
+    AnyCITable(const any_dict& d) :AnyObject(AnyType::Table) {
+        for (auto& [k, v] : d) {
+            if(!v.is_void())table.emplace(k, v);
+        }
+    }
+    //void set_type(const string&)override;
+    //const lua_mod* get_type()const;
+    virtual string tname()const override { static const string t{ "Object" }; return t; }
+    bool incl(const AnyIndex& key) const override;
+    virtual bool count(unsigned)const { return false; }
+    Any rawget(const string& key, const Any& val = {})const {
+        return table.count(key) ? table.at(key) : Any();
+    }
+    Any get(const AnyIndex& key, const Any& val = {})override {
+        return rawget(key.str(), val);
+    }
+    void rawset(const string& key, const Any& val = {}) {
+        if (!val.is_void())table[key] = val;
+        else table.erase(key);
+    }
+    json to_json()const override;
+    toml::table to_toml()const;
 };
 class Anys :public AnyObject {
 protected:
@@ -366,7 +404,7 @@ public:
     Anys():AnyObject(AnyType::Anys){}
     Anys(const any_dict& d):AnyObject(AnyType::Anys) {
         for (auto& [k, v] : d) {
-            fields.insert(k, v);
+            if (!v.is_void())fields.insert(k, v);
         }
     }
     //void set_type(const string&)override;

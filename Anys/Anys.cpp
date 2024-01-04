@@ -159,9 +159,20 @@ bool Any::incl(const AnyIndex& key) const {
 }
 
 Any AnyObject::get(const AnyIndex&, const Any&) { return Any(); }
+//AnyCITable
+bool AnyCITable::incl(const AnyIndex& key)const {
+	return key.is_string() && table.count(key.str());
+}
 //Anys
 bool Anys::incl(const AnyIndex& key)const {
 	return fields.count(key);
+}
+json AnyCITable::to_json()const {
+	json tab = json::object();
+	for (auto& [key, val] : table) {
+		tab.emplace(key, val.to_json());
+	}
+	return tab;
 }
 json Anys::to_json()const {
 	json tab = json::object();

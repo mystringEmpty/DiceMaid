@@ -1,9 +1,9 @@
 #pragma once
 #include "AnyProfile.h"
-class AnysDriver :public AnyProfile {
+class AnysDriver :public AnyProfileSet {
 	std::atomic<bool> Alived = false;
 public:
-	std::unordered_map<AnyIndex, AnyProfile> configs;
+	AnysDriver():AnyProfileSet(std::filesystem::absolute(std::filesystem::current_path()) / "Diceki", FileType::Toml){}
 	void init();
 	bool alive()const { return Alived; }
 	void log(const string&, LogLevel);

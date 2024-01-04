@@ -25,39 +25,23 @@ const char* _DriverVer() {
 }
 //const string Empty;
 
-string ws_url;
-bool link_server() {
-	linker = std::make_unique<WSServer>(ws_url);
-	return true;
-}
 
 bool driver_init() {
 	app.init();
-	if (auto cfg{ app.configs["init"] };cfg.incl("onebot")) {
-		ws_url = cfg["onebot"]["ws_address"]->str();
-		cout << "ws_address:" << ws_url << endl;
-		if(!ws_url.empty())return true;
-	}
-	/*
-	if (fs::path tomlInit{ app.getRootDir() / "Diceki" / "init.toml" }; fs::exists(tomlInit)) {
-		cout << tomlInit << endl;
-		auto t = toml::parse_file(tomlInit.u8string());
-		if (t["onebot"]["ws_address"]) {
-			ws_url = string(*t["onebot"]["ws_address"].as_string());
+	if (auto& cfg{ *app.get("init") };cfg.incl("onebot")) {
+		if (string ws_url = cfg["onebot"]["ws_address"]->str(); !ws_url.empty()) {
 			cout << "ws_address:" << ws_url << endl;
+			linker = std::make_unique<WSServer>(ws_url);
 			return true;
 		}
-	}*/
+	}
 	api->fatal("服务端配置读取失败！请确认Diceki/init.toml有写入ws_address！");
 	return false;
 }
 
 int main() {
 	if (driver_init()) {
-		while (link_server()) {
-			linker->keep();
-			sleep_for(30s);
-		}
+		linker->keep();
 	}
 	app.exit();
 	return 0;
