@@ -5,7 +5,6 @@
 #include "CharConvert.hpp"
 //#include "HelperChar.hpp"
 #include "HelperClock.hpp"
-#include "WSServer.hpp"
 
 template<typename T>
 using ptr = std::shared_ptr<T>;
@@ -19,23 +18,28 @@ Bot* getBotByID(AnyIndex id) {
 	return &bots[id];
 }
 
-const char* _DriverVer() {
+static const char* _DriverVer() {
 	static string ver = string(app_title) + " by " + app_author + " ver" + app_ver + "(" + std::to_string(app_build) + ")[" + _built_time() + "] for OneBot";
 	return ver.c_str();
 }
 //const string Empty;
 
 
-bool driver_init() {
+static bool driver_init() {
 	app.init();
 	if (auto& cfg{ *app.get("init") };cfg.incl("onebot")) {
-		if (string ws_url = cfg["onebot"]["ws_address"]->str(); !ws_url.empty()) {
+		if (string ws_url = cfg["onebot"]["ws"]->str(); !ws_url.empty()) {
 			cout << "ws_address:" << ws_url << endl;
+			linker = std::make_unique<WSClient>(ws_url);
+			return true;
+		}
+		else if (ws_url = cfg["onebot"]["reverse_ws"]->str(); !ws_url.empty()) {
+			cout << "reverse_ws:" << ws_url << endl;
 			linker = std::make_unique<WSServer>(ws_url);
 			return true;
 		}
 	}
-	api->fatal("服务端配置读取失败！请确认Diceki/init.toml有写入ws_address！");
+	api->fatal("服务端配置读取失败！请确认Diceki/init.toml有写入onebot.ws或reverse_ws！");
 	return false;
 }
 

@@ -1,6 +1,4 @@
 #pragma once
-#include <string>
-#include <unordered_map>
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -19,6 +17,7 @@ constexpr size_t MAX_PAYLOAD_SIZE = 8 * 1024;
 
 struct ClientState {
     lws* wsi = nullptr;
+    ClientState(lws* s) :wsi(s) {}
     string rcvData;
     std::unordered_map<std::string, std::pair<json, time_t>> mEcho;
     void write_data(const string& data) {
@@ -70,7 +69,7 @@ struct ClientState {
 
 class WSLinker {
 protected:
-    struct lws_context* context;
+    struct lws_context* context{ nullptr };
 public:
     //lws* wsi{ nullptr };
     bool isBreak{ false };
@@ -83,6 +82,7 @@ public:
         lws_context_destroy(context);
         context = nullptr;
     }
+    //virtual ClientState* getClient(lws* wsi) = 0;
 };
 
 //extern std::unique_ptr<WSLinker> linker;

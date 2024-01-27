@@ -21,7 +21,7 @@ void OneBotApi::listenEvent(Anys& raw) {
 	else api->debug("未监听事件：" + raw["event"]->str());
 }
 
-void OneBot_Event(json& j, ClientState* cli) {
+static void OneBot_Event(json& j, ClientState* cli) {
 	//clock_t t{ clock() };
 	try {
 		if (j.count("post_type")) {
@@ -34,8 +34,10 @@ void OneBot_Event(json& j, ClientState* cli) {
 					{"echo","login_info"},
 					}); !data.is_null()) {
 					bot->rawset("name", data["nickname"]);
+					api->debug("new Bot:" + string(data["nickname"]));
 				}
 			}
+			if (j.count("meta_event_type"))return;
 			if (j["post_type"] == "message") {
 				string msg{ j["message"] };
 				//频道
@@ -228,12 +230,12 @@ public:
 		std::lock_guard<std::mutex> lk{ Fetching };
 		try {
 			json j = json::parse(eve); 
-			if (!j.count("meta_event_type")) {
+			//if (!j.count("meta_event_type")) {
 				if (j.count("echo") && !j["echo"].is_null()) {
 					cli->mEcho[j["echo"]] = { j["data"],time(nullptr) };
 				}
 				else eves.emplace(j, cli);
-			}
+			//}
 		}
 		catch (json::exception& e) {
 			api->debug(string("解析接收json错误:") + e.what());
@@ -275,7 +277,7 @@ public:
 Event_Pool eve_pool; 
 //lws* client_wsi{ nullptr };
 int callback_ws(lws* wsi, enum lws_callback_reasons reasons, void* user, void* _in, size_t _len) {
-	auto cli{ (ClientState*)user };
+	ClientState* cli{ (ClientState*)user };
 	char buffer[LWS_PRE + MAX_PAYLOAD_SIZE + 1] = { 0 };
 	memset(buffer, 0, LWS_PRE + MAX_PAYLOAD_SIZE);
 	//发送或者接受buffer，建议使用栈区的局部变量，lws会自己释放相关内存
@@ -308,8 +310,7 @@ int callback_ws(lws* wsi, enum lws_callback_reasons reasons, void* user, void* _
 		break;
 	case LWS_CALLBACK_ESTABLISHED:	//0
 		if (wsi) {
-			new(cli) ClientState();
-			cli->wsi = wsi;
+			new(cli) ClientState(wsi);
 		}
 		eve_pool.start();
 		cout << "Websockets ESTABLISHED" << endl;
@@ -317,8 +318,7 @@ int callback_ws(lws* wsi, enum lws_callback_reasons reasons, void* user, void* _
 		break;
 	case LWS_CALLBACK_CLIENT_ESTABLISHED:   //3
 		if (wsi) {
-			new(cli) ClientState();
-			cli->wsi = wsi;
+			new(cli) ClientState(wsi);
 		}
 		eve_pool.start();
 		//连接成功时，会触发此reason

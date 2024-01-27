@@ -3,6 +3,7 @@
 #include "CharConvert.hpp"
 #include "FrameAPI.hpp"
 #include "WSServer.hpp"
+#include "WSClient.hpp"
 #include "FrameChat.h"
 
 using namespace std::this_thread;
@@ -26,7 +27,6 @@ class OneBotApi :public FrameAPI {
 	std::unordered_map<long long, Anys> MsgBackUp;
 	std::queue<long long> MsgIDQueue;
 	std::mutex mtMsgList;
-	//std::unordered_map<long long, lws*> QQ_wsi;
 public:
 	OneBotApi() = default;
 	//~OneBotApi();

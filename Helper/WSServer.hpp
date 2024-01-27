@@ -1,8 +1,5 @@
 #pragma once
 #include <queue>
-#define LWS_ROLE_H1
-#define LWS_WITH_NETWORK
-#include "libwebsockets.h"
 #include "WSLinker.hpp"
 using std::queue;
 
@@ -49,14 +46,14 @@ public:
             //{ "http-only", callback_http, 0, 0 },
             {
                 //协议名称，协议回调，接收缓冲区大小
-                "ws-protocol", callback_ws, sizeof(ClientState), MAX_PAYLOAD_SIZE,
+                "ws-protocol", callback_ws, sizeof(this), MAX_PAYLOAD_SIZE,
             },
             {
-                NULL, NULL,   0 // 最后一个元素固定为此格式
+                nullptr, nullptr,   0 // 最后一个元素固定为此格式
             }
         };
         //lws初始化阶段
-        lws_set_log_level(0xFF, NULL);
+        lws_set_log_level(0xFE, nullptr);
         struct lws_context_creation_info info { 0 }; //websocket 配置参数
 
         info.protocols = lwsprotocol;       //设置处理协议
@@ -69,7 +66,7 @@ public:
 
         // 创建WebSocket语境
         context = lws_create_context(&info); //websocket 连接上下文
-        while (context == NULL) {
+        while (!context) {
             std::cout << "websocket连接上下文创建失败" << std::endl;
         }
     }

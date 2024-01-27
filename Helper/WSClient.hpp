@@ -1,24 +1,11 @@
 #pragma once
-#define LWS_ROLE_H1
-#define LWS_WITH_NETWORK
-#include "libwebsockets.h"
 #include "json.hpp"
 #include "HelperHttp.hpp"
-#include <string>
 #include <queue>
-#include <unordered_map>
 #include <memory>
-#include <iostream>
-#include <thread>
-#include <chrono>
-using nlohmann::json;
-using std::string;
+#include "WSLinker.hpp"
+
 using std::queue;
-using std::cout;
-using std::endl;
-using namespace std::chrono;
-using namespace std::chrono_literals;
-using namespace std::this_thread;
 
 #define MAX_PAYLOAD_SIZE  8 * 1024
 class EventClient;
@@ -37,21 +24,13 @@ class EventClient;
  */
 //int callback_http(lws* wsi, enum lws_callback_reasons reasons, void* user, void* in, size_t len);
 int callback_ws(lws* wsi, enum lws_callback_reasons reasons, void* user, void* in, size_t len);
-class EventClient{
-    struct lws_context* context;
-	lws* wsi{ nullptr };
-	bool isBuilt{ false };
-	bool isBreak{ false };
-	//bool isStoping{ false };
-	int recvSum{ 0 };
-	time_t lastGet{ 0 };
-	std::queue<string> qSending;
-    string rcvData;
+class WSClient : public WSLinker{
     //friend int callback_http(lws*, enum lws_callback_reasons, void*, void*, size_t);
     friend int callback_ws(lws*, enum lws_callback_reasons, void*, void*, size_t);
 public:
     std::unordered_map<string, std::pair<json, time_t>> mEcho;
-    EventClient(string url) {
+    WSClient(string url)//: ClientState(nullptr)
+    {
         bool ssl{ false }; //确认是否进行SSL加密
         string addr; //目标主机
         string path{ "/" }; //目标主机服务PATH
@@ -91,14 +70,14 @@ public:
             //{ "http-only", callback_http, 0, 0 },
             {
                 //协议名称，协议回调，接收缓冲区大小
-                "ws-protocol-example", callback_ws, sizeof(EventClient), MAX_PAYLOAD_SIZE,
+                "ws-protocol-example", callback_ws, sizeof(this), MAX_PAYLOAD_SIZE,
             },
             {
-                NULL, NULL,   0 // 最后一个元素固定为此格式
+                nullptr, nullptr,   0 // 最后一个元素固定为此格式
             }
         };
         //lws初始化阶段
-        lws_set_log_level(0xFF, NULL);
+        lws_set_log_level(0xFE, nullptr);
         struct lws_context_creation_info info { 0 }; //websocket 配置参数
 
         info.protocols = lwsprotocol;       //设置处理协议
@@ -110,7 +89,7 @@ public:
 
         // 创建WebSocket语境
         context = lws_create_context(&info); //websocket 连接上下文
-        while (context == NULL) {
+        while (!context) {
             cout << "websocket连接上下文创建失败" << endl;
         }
 
@@ -123,55 +102,20 @@ public:
         conn_info.host = lws_canonical_hostname(context);      //设置目标主机header
         conn_info.origin = "origin";    //设置目标主机IP
         //ci.pwsi = &wsi;            //设置wsi句柄
-        conn_info.userdata = this;        //userdata 指针会传递给callback的user参数，一般用作自定义变量传入
+        conn_info.userdata = malloc(sizeof(ClientState));        //userdata 指针会传递给callback的user参数，一般用作自定义变量传入
         conn_info.protocol = lwsprotocol[0].name;
 
         //ws/wss需要不同的配置
         conn_info.ssl_connection = ssl ? (LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED | LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK | LCCSCF_ALLOW_INSECURE) : 0;
-        do {//使连接信息生效
-            if (wsi = lws_client_connect_via_info(&conn_info))break;
+        while (!lws_client_connect_via_info(&conn_info)); {//使连接信息生效
             cout << "Client Connect Waiting: " << addr << ":" << port << "/" << path << endl;
-            sleep_for(3s);
-        } while (!wsi);
+            sleep_for(5s);
+        } 
     }
-    ~EventClient() {
+    ~WSClient() {
         if (context) {
             lws_context_destroy(context);
         }
     }
-    static string access_token;
-    void keep() {
-        //进入消息循环
-        while (!isBreak) {
-            lws_service(context, 20);
-        }
-        lws_context_destroy(context);
-        context = nullptr;
-    }
-	void send_data(const string& data) {
-        qSending.emplace(data);
-    }
-    void send(const json& data) {
-        qSending.emplace(data.dump());
-    }
-    json get_data(const json& data) {
-        string echo_key{ data["echo"] };
-        if (auto it{ mEcho.find(echo_key) }; it != mEcho.end()) {
-            if (time(nullptr) - it->second.second < 60
-                && !it->second.first.is_null())
-                return it->second.first;
-            else mEcho.erase(it);
-        }
-        qSending.emplace(data.dump());
-        size_t cntTry{ 0 };
-        do {
-            if (++cntTry > 100)break;
-            std::this_thread::sleep_for(50ms);
-        } while (!mEcho.count(echo_key));
-        return mEcho[echo_key].first;
-    }
-	void shut() {
-        isBreak = true;
-    }
+    //ClientState* getClient(lws* wsi) override{ return this; }
 };
-extern std::unique_ptr<EventClient> client;
