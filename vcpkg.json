@@ -5,6 +5,7 @@
     "msgpack",
     "yaml-cpp",
     "libuv",
-    "libwebsockets"
+    "libwebsockets",
+    "lua"
   ]
 }

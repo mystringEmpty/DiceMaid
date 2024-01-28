@@ -1,25 +1,8 @@
+#include <iostream>
+#include "CharConvert.hpp"
+//#include "HelperClock.hpp"
 #include "OneBotAPI.h"
 #include "AnysDriver.h"
-#include "CharConvert.hpp"
-#include "HelperClock.hpp"
-#include <unordered_set>
-#include <iostream>
-//std::unordered_set<long long>approveFriendReq;
-//std::unordered_set<long long>eventsFriendAdd;
-
-void OneBotApi::listenEvent(Anys& raw) {
-	if (raw["event"] == "message") {
-		if (raw["subtype"] == "private_msg") {
-			api->debug("处理私聊消息");
-			sendDirectMsg(raw["self_bot"], raw["uid"],"消息已收到√");
-		}
-		else if (raw["subtype"] == "group_msg") {
-			if (raw["msg"]->str() == "?")sendGroupMsg(raw["self_bot"], raw["gid"], "√");
-		}
-		return;
-	}
-	else api->debug("未监听事件：" + raw["event"]->str());
-}
 
 static void OneBot_Event(json& j, ClientState* cli) {
 	//clock_t t{ clock() };
@@ -34,7 +17,7 @@ static void OneBot_Event(json& j, ClientState* cli) {
 					{"echo","login_info"},
 					}); !data.is_null()) {
 					bot->rawset("name", data["nickname"]);
-					api->debug("new Bot:" + string(data["nickname"]));
+					//api->debug("new Bot:" + string(data["nickname"]));
 				}
 			}
 			if (j.count("meta_event_type"))return;
@@ -58,11 +41,12 @@ static void OneBot_Event(json& j, ClientState* cli) {
 					//int msgId{ j["message_id"].get<int>() };
 					//私聊
 					if (j["message_type"] == "private") {
-						api->debug("收到私聊消息");
+						//api->debug("收到私聊消息");
 						api->listenEvent(Anys{ {
 						{"event","message"},
 						{"subtype","private_msg"},
 						{"self_bot",bot},
+						{"chat", api->getUser(j["user_id"])},
 						{"uid",j["user_id"]},
 						{"msg",msg},
 						} });
@@ -73,6 +57,7 @@ static void OneBot_Event(json& j, ClientState* cli) {
 						{"event","message"},
 						{"subtype","group_msg"},
 						{"self_bot",bot},
+						{"chat", api->getGroup(j["group_id"])},
 						{"uid",j["user_id"]},
 						{"gid",j["group_id"]},
 						{"msg",msg},
@@ -202,6 +187,9 @@ static void OneBot_Event(json& j, ClientState* cli) {
 					//string msg = j["comment"];
 				}
 			}
+			else {
+				api->debug("ignored post_type:" + string(j["post_type"]));
+			}
 		}
 		else if (j["status"] == "ok")return;
 	}
@@ -216,12 +204,12 @@ static void OneBot_Event(json& j, ClientState* cli) {
 }
 class Event_Pool {
 	std::queue<std::pair<json, ClientState*>> eves;
-	std::array<std::thread, 10> pool;
+	std::array<std::thread, 8> pool;
 	std::mutex Fetching;
 	bool isActive{ false };
 public:
 	void start() {
-		if(!isActive)for (int i = 0; i < 10; ++i) {
+		if(!isActive)for (int i = 0; i < 8; ++i) {
 			pool[i] = std::thread(&Event_Pool::listenEvent, this);
 		}
 		isActive = true;

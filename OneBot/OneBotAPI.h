@@ -1,10 +1,8 @@
 #pragma once
 #include <iostream>
-#include "CharConvert.hpp"
-#include "FrameAPI.hpp"
 #include "WSServer.hpp"
 #include "WSClient.hpp"
-#include "FrameChat.h"
+#include "FrameAPI.hpp"
 
 using namespace std::this_thread;
 using namespace std::chrono_literals;
@@ -36,7 +34,7 @@ public:
 	//unordered_map<long long, unordered_map<long long, Anys>> GroupInvs;
 	//被邀请bot-申请者QQ
 	//unordered_map<long long, unordered_map<long long, Anys>> FriendReqs;
-	void listenEvent(Anys&)override;
+	//void listenEvent(Anys&)override;
 	std::optional<Anys> lookupMsg(Any id) {
 		std::lock_guard<std::mutex> lock{ mtMsgList };
 		if (auto i{ id.to_int() }; MsgBackUp.count(id.to_int()))
@@ -57,61 +55,10 @@ public:
 		static string heads[7] = { "Debug", "Info", "Notice", "Warning", "Error", "Critical", "Fatal"};
 		cout << '[' << heads[(int)lv] << "] " << charcvtToNative(msg) << endl;
 	}
-	void sendMsg(const Any& bot, const Any& aim, const string& msg)override {
-		//Bot* self{ getBot(bot) };
-		//Chat* chat{ aim.to_udata<Chat>() };
-		if (bot && aim && !msg.empty()) {
-			if (auto ct{ aim.as_anys<Chat>()->chatType };ct == Chat::Type::Private) {
-				sendDirectMsg(bot, aim, msg);
-			}
-			else if (ct == Chat::Type::Group) {
-				sendGroupMsg(bot, aim, msg);
-			}
-		}
-	}
-	void sendDirectMsg(const Any& bot, const Any& aim, const string& msg)override {
-		if (bot && aim && !msg.empty()) {
-			api->debug("发送私聊消息");
-			bot.as_anys<OneBot>()->client->send(json{
-				{"action","send_private_msg"},
-				{"params",{
-					{"user_id",aim.to_int()},
-					//{"group_id",self->lastChats[aimQQ]->ID},
-					{"message",msg},
-				}}, }
-			);
-		}
-		else if (!bot)api->error("sendDirectMsg: bot is null!");
-		else if (!aim)api->error("sendDirectMsg: aim is null!");
-	}
-	void sendGroupMsg(const Any& bot, const Any& gid, const string& msg)override {
-		if (!bot || !gid || msg.empty())return;
-		bot.as_anys<OneBot>()->client->send(json{
-			{"action","send_group_msg"},
-			{"params",{
-				{"group_id",gid.to_int()},
-				{"message",msg},
-			}}, }
-		);
-	}
-	void replyMsg(const Any& eve, const string& msg)override {
-		if (msg.empty())return;
-		//string subtype{ eve["subtype"] };
-		//int msgtype{ (int)eve["raw_type"]->to_int() };
-		if (Any chat{ eve["chat"] }) {
-			if (chat["type"]->to_int() > 1) {
-				sendGroupMsg(eve["bot"], chat, msg);
-			}
-			else {
-				//if (subtype == "self")msgtype = 1;
-				sendDirectMsg(eve["bot"], chat, msg);
-			}
-		}
-		else {
-			api->log("Reply获取聊天ID失败", LogLevel::Notice);
-			return;
-		}
-	}
+	void sendMsg(const Any& bot, const Any& aim, const string& msg)override;
+	void sendDirectMsg(const Any& bot, const Any& aim, const string& msg)override;
+	void sendGroupMsg(const Any& bot, const Any& aim, const string& msg)override;
+	void replyMsg(const Any& eve, const string& msg)override;
 	void eraseMsg(const Any& bot, const Any& msg)override {
 		if (msg && msg.incl("msg_id")) {
 			bot.as_anys<OneBot>()->client->send(json{

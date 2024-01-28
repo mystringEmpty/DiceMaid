@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <unordered_map>
+#include <iostream>
 //#include <mutex>
 //using exlock = std::lock_guard<std::mutex>;
 
@@ -12,14 +13,15 @@ template<typename T>
 std::enable_if_t<std::is_fundamental_v<T> || std::is_same_v<T, std::string>, bool> is_void(const T& obj) {
     return false;
 }
-
+template<typename _Kty, typename _Ty>
+using umap = std::unordered_map<_Kty, _Ty>;
 template<typename _Kty, typename _Ty>
 class fifo_base {
 protected:
     size_t inc_end{ 0 };
-    std::unordered_map<_Kty, size_t> index;
+    umap<_Kty, size_t> index;
     std::map<size_t, _Kty> orders;
-    std::unordered_map<_Kty, _Ty> values;
+    umap<_Kty, _Ty> values;
 public:
     using value_type = std::pair<const _Kty, _Ty>;
     fifo_base() = default;
@@ -54,14 +56,23 @@ public:
         std::advance(fwd, n);
         return fwd == orders.end() ? inc_end : fwd->first;
     }
+    size_t prev(size_t idx, size_t n = 1)const {
+        auto it{ orders.upper_bound(idx) };
+        std::advance(it, -n);
+        return it->first;
+    }
 };
 template<typename _Kty, typename _Ty>
 class fifo_const_iter {
     using const_iterator = fifo_const_iter<_Kty, _Ty>;
     using _Base = fifo_base<_Kty, _Ty>;
-    using value_type = std::pair<const _Kty, _Ty>;
     const _Base* const con;
 public:
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = std::pair<const _Kty, _Ty>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const value_type*;
+    using reference = const value_type&;
     size_t idx;
     explicit fifo_const_iter(const _Base* ref, size_t i = 0) :con(ref), idx(i) {}
     const value_type& operator*()const {
@@ -70,12 +81,20 @@ public:
     const value_type* operator->() {
         return &con->in(idx);
     }
+    bool operator==(const const_iterator& other)const {
+        return con == other.con &&
+            (idx == other.idx || con->empty());
+    }
     bool operator!=(const const_iterator& other)const {
         return con != other.con ||
             (idx != other.idx && !con->empty());
     }
     const_iterator& operator++() {
         idx = con->next(idx);
+        return *this;
+    }
+    const_iterator& operator--() {
+        idx = con->prev(idx);
         return *this;
     }
 };
@@ -86,9 +105,10 @@ class fifo_iter {
 public:
     size_t idx;
     using iterator = fifo_iter<_Kty, _Ty>;
-    using iterator_category = std::random_access_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag;
     using value_type = std::pair<const _Kty, _Ty>;
-    using difference_type = ptrdiff_t;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
     using pointer = value_type*;
     using reference = value_type&;
     explicit fifo_iter(_Base* ref = nullptr, size_t i = 0) :con(ref), idx(i) {}
@@ -122,6 +142,34 @@ public:
         idx = con->next(idx, n);
         return *this;
     }
+    iterator& operator--() {
+        idx = con->prev(idx);
+        return *this;
+    }
+    iterator& operator-=(size_t n) {
+        idx = con->prev(idx, n);
+        return *this;
+    }
+}; 
+//template<typename _Kty>
+//struct std::iterator_traits<fifo_iter<_Kty>> {
+//    using iterator_category = std::forward_iterator_tag;
+//    using value_type = int;
+//};
+template<typename _Kty>
+class fifo_compare {
+    umap<_Kty, size_t>* idx;
+public:
+    fifo_compare(umap<_Kty, size_t>* p):idx(p){}
+    bool operator()(const _Kty& left, const _Kty& right) const{
+        if (auto l{ idx->find(left) };l != idx->end()) {
+            if (auto r{ idx->find(right) }; r != idx->end()) {
+                return l->second < r->second;
+            }
+            else return true;
+        }
+        else return false;
+    }
 };
 template<typename _Kty, typename _Ty, typename Compare = void,
     typename _Alloc = std::allocator<std::pair<const _Kty, _Ty>>>
@@ -131,41 +179,47 @@ class fifo_map :public fifo_base<_Kty, _Ty> {
     using const_iterator = fifo_const_iter<_Kty, _Ty>;
 public:
     using key_type = _Kty;
-    using value_type = std::pair<const _Kty, _Ty>; 
     using mapped_type = _Ty;
+    using value_type = std::pair<const _Kty, _Ty>;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
     using iterator = fifo_iter<_Kty, _Ty>;
-    fifo_map(){};
-    fifo_map(std::initializer_list<std::pair<_Kty, _Ty>> list) {
+    using key_compare = fifo_compare<_Kty>;
+    key_compare cmp;
+    fifo_map(): cmp(&index) {};
+    fifo_map(std::initializer_list<std::pair<_Kty, _Ty>> list): cmp(&index) {
         for (auto& x : list) {
             insert(x);
         }
     }
-    bool operator==(const fifo_map<_Kty, _Ty>& other)const { return _Base::values == other.values; }
-    size_t max_size()const noexcept { return _Base::values.max_size(); }
-    bool count(const _Kty& key)const { return _Base::index.count(key); }
+    bool operator==(const fifo_map& other)const {
+        return values == other.values;
+    }
+    size_t max_size()const noexcept { return values.max_size(); }
+    bool count(const _Kty& key)const { return index.count(key); }
     iterator begin() {
-        return iterator(this, _Base::orders.empty() ? 0 : _Base::orders.begin()->first);
+        return iterator(this, orders.empty() ? 0 : orders.begin()->first);
     }
     const_iterator begin()const {
-        return const_iterator(this, _Base::orders.empty() ? 0 : _Base::orders.begin()->first);
+        return const_iterator(this, orders.empty() ? 0 : orders.begin()->first);
     }
     const_iterator cbegin()const { return begin(); }
     iterator end() {
-        return iterator(this, _Base::inc_end);
+        return iterator(this, inc_end);
     }
     const_iterator end()const {
-        return const_iterator(this, _Base::inc_end);
+        return const_iterator(this, inc_end);
     }
     const_iterator cend()const { return end(); }
     iterator find(const _Kty& key) { 
-        if (_Base::index.count(key)) {
-            return iterator(this, _Base::index.at(key));
+        if (auto it{ index.find(key) };it!= index.end()) {
+            return iterator(this, it->second);
         }
         return end();
     }
     const_iterator find(const _Kty& key)const {
-        if (_Base::index.count(key)) {
-            return const_iterator(this, _Base::index.at(key));
+        if (auto it{ index.find(key) }; it != index.end()) {
+            return const_iterator(this, it->second);
         }
         return end();
     }
@@ -173,43 +227,43 @@ public:
         return insert({k,v});
     }
     std::pair<iterator, bool> insert(const value_type& p) {
-        if (auto it{ _Base::index.find(p.first) }; it != _Base::index.end()) {
-            _Base::values.at(it->first) = p.second;
+        if (auto it{ index.find(p.first) }; it != index.end()) {
+            values.at(it->first) = p.second;
             return { iterator(this, it->second), false };
         }
-        _Base::values.emplace(p);
-        _Base::orders.emplace(_Base::inc_end, p.first);
-        _Base::index.emplace(p.first, _Base::inc_end);
-        return { iterator(this, ++_Base::inc_end), true };
+        values.emplace(p);
+        orders.emplace(inc_end, p.first);
+        index.emplace(p.first, inc_end);
+        return { iterator(this, ++inc_end), true };
     }
     std::pair<iterator, bool> emplace(const _Kty& key, const _Ty& val) {
-        if (_Base::index.count(key)) {
-            return { end(),false };
+        if (auto it{ index.find(key) }; it != index.end()) {
+            return { iterator(this, it->second), false };
         }
-        _Base::values.emplace( key, val );
-        _Base::orders.emplace(_Base::inc_end, key);
-        _Base::index[key] = _Base::inc_end;
-        return { iterator(this, ++_Base::inc_end) , true};
+        values.emplace(key, val );
+        orders.emplace(inc_end, key);
+        index.emplace(key, inc_end);
+        return { iterator(this, ++inc_end) , true};
     }
     iterator erase(const _Kty& key) {
         //exlock guard{ ex_key };
-        if (auto it(_Base::index.find(key)); it != _Base::index.end()) {
-            auto idx{ _Base::index.at(key) };
-            auto next{ ++_Base::orders.find(idx) };
-            _Base::index.erase(it);
-            _Base::orders.erase(idx);
-            _Base::values.erase(key);
-            if (next != _Base::orders.end())return iterator(this, next->first);
+        if (auto it(index.find(key)); it != index.end()) {
+            auto idx{ it->second };
+            auto next{ ++orders.find(idx) };
+            index.erase(it);
+            orders.erase(idx);
+            values.erase(key);
+            if (next != orders.end())return iterator(this, next->first);
         }
         return end();
     }
     iterator erase(const iterator& iter) {
         //exlock guard{ ex_key };
-        if (auto it(_Base::orders.find(iter.idx)); it != _Base::orders.end()) {
-            _Base::index.erase(it->second);
-            _Base::values.erase(it->second);
-            _Base::orders.erase(it);
-            return iterator(this, _Base::next(iter.idx));
+        if (auto it(orders.find(iter.idx)); it != orders.end()) {
+            index.erase(it->second);
+            values.erase(it->second);
+            orders.erase(it);
+            return iterator(this, next(iter.idx));
         }
         return end();
     }
@@ -220,11 +274,11 @@ public:
         orders.swap(other.orders);
     }
     void clear() noexcept {
-        if (_Base::inc_end) {
-            _Base::inc_end = 0;
-            _Base::values.clear();
-            _Base::index.clear();
-            _Base::orders.clear();
+        if (inc_end) {
+            inc_end = 0;
+            values.clear();
+            index.clear();
+            orders.clear();
         }
     }
 };

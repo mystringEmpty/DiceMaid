@@ -77,7 +77,7 @@ public:
             }
         };
         //lws初始化阶段
-        lws_set_log_level(0xFE, nullptr);
+        lws_set_log_level(LLL_ERR|LLL_WARN|LLL_NOTICE|LLL_INFO|LLL_PARSER|LLL_HEADER|LLL_EXT|LLLF_SECRECY_PII, nullptr);
         struct lws_context_creation_info info { 0 }; //websocket 配置参数
 
         info.protocols = lwsprotocol;       //设置处理协议

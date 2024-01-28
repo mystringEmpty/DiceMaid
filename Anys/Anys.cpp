@@ -38,12 +38,59 @@ AnyIndex::AnyIndex(const Any& a) {
 		}
 	}
 }
+AnyIndex::AnyIndex(const json& j) {
+	if (j.is_number()) {
+		double num{ j };
+		if (auto it{ hashed_num.find(num) }; it != hashed_num.end()) {
+			idx = it->second;
+		}
+		else {
+			lock_writer lock{ exAnyIndex };
+			idx = hashed_num[num] = atoms.size();
+			atoms.push_back(num);
+		}
+	}
+	else if (j.is_string()) {
+		string s{ j };
+		if (auto it{ hashed_str.find(s) }; it != hashed_str.end()) {
+			idx = it->second;
+		}
+		else {
+			lock_writer lock{ exAnyIndex };
+			idx = hashed_str[s] = atoms.size();
+			atoms.push_back(s);
+		}
+	}
+}
+std::string to_String(double num) {
+	string s{ std::to_string(num) };
+	if (s.find('.') != string::npos) {
+		auto ed{ s.end() }, r{ ed };
+		while (*(r - 1) == '0') {
+			--r;
+		}
+		if (*(r - 1) == '.')--r;
+		if (r != ed)s.erase(r, ed);
+	}
+	return s;
+}
 string AnyIndex::str() const {
 	if (auto atom{ atoms[idx] }; std::holds_alternative<string>(atom))
 		return std::get<string>(atom);
 	else if (std::holds_alternative<double>(atom))
-		return std::to_string(std::get<double>(atom));
+		return to_String(std::get<double>(atom));
 	return {};
+}
+long long AnyIndex::to_ll()const {
+	if (auto atom{ atoms[idx] }; std::holds_alternative<string>(atom)){
+		try {
+			return stoll(std::get<string>(atom));
+		}
+		catch (std::exception& e) {}
+	}
+	else if (std::holds_alternative<double>(atom))
+		return long long(std::get<double>(atom));
+	return 0;
 }
 
 //AnyRef
@@ -96,6 +143,7 @@ bool AnyString::operator==(const char* other)const {
 	return data == other;
 }
 
+Any::Any(AnyObject& obj) : value(obj.copy()) {}
 Any::Any(const json& j) {
 	switch (j.type()) {
 	case json::value_t::null:
